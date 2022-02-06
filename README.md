@@ -26,15 +26,8 @@ Additionally, depending on the requested cluster manager for the Spark cluster, 
 * Kubernetes Spark cluster:
     * VirtualBox
     * Vagrant
+
 ## Installation
-
-Run the following to install:
-
-```python
-pip install easySparkTool
-```
-
-## Installation from source
 
 Clone EasySpark's repository from GitHub. Next open a terminal,  `cd` into that path and run:
 
