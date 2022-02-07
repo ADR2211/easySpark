@@ -18,7 +18,7 @@ REQUIREMENTS = [
     "configparser >= 5.2.0",
     "kubernetes >= 21.7.0",
     "python_vagrant >= 0.5.15",
-    "pyyaml >= 0.0.2",
+    "pyyaml >= 5.4.1",
     ]
 
 with open("README.md", "r") as fh:
