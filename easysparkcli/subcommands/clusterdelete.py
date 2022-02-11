@@ -26,15 +26,13 @@ def cli(**kwargs):
     Deletes deployed on-premise Spark cluster and its associated files.
     """
     try:
-        x=suma(1,2)
-        print(x)
         stringSharedFolder = expanduser("~")       
         sharedpath = PurePath(stringSharedFolder) / ".easySparkTool"
         raw_data=read_config_file(kwargs.get("configfile"))
         validated_data=validate_raw_config(raw_data)
 
         if validated_data["cluster"].get("deploy_type") == 'k8s':
-            cmd=['minikube','delete','-p','EasySpark']
+            cmd=['minikube','delete','-p','easyspark']
             subprocess.run(cmd,stderr=sys.stderr,stdout=sys.stdout)
 
         elif validated_data["cluster"].get("deploy_type") == 'standalone':

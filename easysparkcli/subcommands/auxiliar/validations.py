@@ -67,6 +67,19 @@ def positive_int(v):
     else:
         raise ValueError("value must be integer > 0")
 
+def multiplo_1024(num):
+    if num % 1024 == 0:
+        return True
+    else:
+        return False
+
+@validator
+def nodes_memory_units(m):
+    converted = int(m)
+    if converted >= 2048 and multiplo_1024(converted):
+        return converted
+    else:
+        raise ValueError("Provided memory units (MB) must be equals or greater than 2048 and multiple of 1024.")
 @validator
 def master_url(url):
     pattern= re.compile(r'\w:([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$')
@@ -96,7 +109,7 @@ def memory_units(units):
 
 @validator
 def check_advanced(advanced):
-    pattern= re.compile(r"^(--conf) (spark\.[A-Za-z.]+=[A-Za-z0-9999]+)(,--conf spark\.[A-Za-z.]+=[A-Za-z0-9]+)*$")
+    pattern= re.compile(r"^(--conf) (spark\.[A-Za-z.]+=[A-Z_.\-a-z0-9999\\/]+)(,--conf spark\.[A-Za-z.]+=[A-Z_.\-a-z0-9999\\/]+)*$")
     if bool(re.search(pattern,advanced)):
         return advanced
     else: 

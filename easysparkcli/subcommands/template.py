@@ -50,7 +50,7 @@ def cli(**kwargs):
                                     'app_jar' : '#Path to the bundled jar that includes the application and its dependencies.',
                                     '':None,
                                     '; ------- note: Optional values for both deploy_types, k8s and standalone.' : None,
-                                    'app_args' : '#Arguments passed to the main method of the main class, if any.',
+                                    'app_args' : '#Arguments passed to the main method of the main class. If there are more than 1, separate them with a space between each one. File paths arguments must exists and be preceded with the statement \"file:\"  in front of them to be shared with the cluster, example: \"app_args=file:C:/Users/Administrator/Desktop/required.txt\"',
                                     'name' : '#Name to show at UI and log data for the application.',
                                     'jarsdir' :'#Existing local directory path containing possible extra jars needed for the execution of the application.',
                                     'jars' : '#Existing local jars paths needed for the execution of the app, separated by commas.',
@@ -76,7 +76,7 @@ def cli(**kwargs):
             templateCfg.clear()
 
             samplefile.write(';Optional section in case of k8s deploy_type, customize  used K8S client to retrieve results of the submit. By default, client is configured with ~/kube/.config/ files.\n#')
-            templateCfg["k8s"] = {'ssl_ca_cert' : 'Set this to customize the certificate file to verify the peer.',
+            templateCfg["k8s"] = {'ssl_ca_cert' : '#Set this to customize the certificate file to verify the peer.',
                                 'api_key' : '#Provide a specific API Key. ',
                                 'api_key_prefix' : '#Prefix to the specific API Key, default: Bearer.',
                                 'host' : '#Base url to connect to.',

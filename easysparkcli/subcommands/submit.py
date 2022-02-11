@@ -153,7 +153,20 @@ def _format_spark_submit_args(tempfile, cliargs, submitsection,submitExecutableP
     if submitsection.get("app_args") is not None:
         argsFormated = submitsection["app_args"].lstrip().split(' ')
         for arg in argsFormated: 
-            argsSubmit.append(arg)
+            if arg.startswith("file:"):
+                file=PurePath(arg.replace("file:",""))
+                if not os.path.isfile(file):
+                    raise ArgumentValueError(f"Invalid argument {arg}, file must exist in the local computer. Please, solve this and try to submit again")
+                stringSharedFolder = expanduser("~") #Obtenemos path directorio compartido con el cluster
+                destinationFilePath = PurePath(stringSharedFolder) / ".easySparkTool" / 'args' / file.name
+                shutil.copy(file,destinationFilePath)
+                if cluster_type == "k8s":
+                    fileInsideCluster= "/tmp/sharedpath/args/" + file.name
+                elif cluster_type == "standalone":
+                    fileInsideCluster= "/vagrant/args/" + file.name 
+                argsSubmit.append(fileInsideCluster)
+            else:
+                argsSubmit.append(arg)
     argsSubmit.insert(0,str(submitExecutablePath)) #Agregamos ejecutable en primera posición
     print(argsSubmit)
     return argsSubmit
@@ -260,9 +273,9 @@ def _local_k8s_submit(validatedconfig,file,temppath,cliargs):
     if (validatedconfig["submit"].get("container_image") is None): #Imaxe docker para os contedores por defecto en caso de que usuario non a especifique
         file.write("spark.kubernetes.container.image".ljust(67) + "adrianrc22/spark:latest\n")
     
-    if (validatedconfig["submit"].get("jarsdir") is not None) or (validatedconfig["submit"].get("jars") is not None):#Si introducen dependencias Jar, indicamos ruta donde se hace la copia
-        file.write("spark.driver.extraClassPath".ljust(67) + "/tmp/sharedpath/jars\n")
-        file.write(f"spark.executor.extraClassPath".ljust(67) + "/tmp/sharedpath/jars\n")
+    #if (validatedconfig["submit"].get("jarsdir") is not None) or (validatedconfig["submit"].get("jars") is not None):#Si introducen dependencias Jar, indicamos ruta donde se hace la copia
+    #    file.write("spark.driver.extraClassPath".ljust(67) + "/tmp/sharedpath/jars\n")
+    #    file.write(f"spark.executor.extraClassPath".ljust(67) + "/tmp/sharedpath/jars\n")
 
     if (validatedconfig["submit"].get("libsdir") is not None) or (validatedconfig["submit"].get("libs") is not None):#Si introducen dependencias como libs, indicamos ruta donde se hace la copia
         file.write("spark.driver.extraLibraryPath".ljust(67) + "/tmp/sharedpath/libs\n")
@@ -272,13 +285,16 @@ def _local_k8s_submit(validatedconfig,file,temppath,cliargs):
         if key in ["app_jar","app_args","advanced","class",'driverlogs_file']:
             continue
         elif key in ["jarsdir","libsdir","libs","jars"]:
-            conf_switcher.get(key)(value)
+            print("entro jars\n")
+            conf_switcher.get(key)(value, file,"k8s")
         elif key in ["historylogs_dir"]:
             conf_switcher.get(key)(file,'k8s')
         else:
             conf_switcher.get(key)(file, value)
     argsSubmit=_format_spark_submit_args(temppath,cliargs,validatedconfig["submit"],submitExecutablePath,'k8s')
     print("\n" + str(argsSubmit) + "\n")
+    file.seek(0)
+    print(file.read())
     file.seek(0)
     print("\n*Executing apache spark batch job ...\n")
     try:
@@ -295,9 +311,9 @@ def _local_k8s_submit(validatedconfig,file,temppath,cliargs):
 def _local_standalone_submit(validatedconfig, file, temppath, cliargs):
 
     submitExecutablePath = _get_spark_submit_executable()
-    if (validatedconfig["submit"].get("jarsdir") is not None) or (validatedconfig["submit"].get("jars") is not None):#Si introducen dependencias Jar, indicamos ruta donde se hace la copia
-        file.write("spark.driver.extraClassPath".ljust(67) + "/vagrant/jars\n")
-        file.write(f"spark.executor.extraClassPath".ljust(67) + "/vagrant/jars\n")
+    #if (validatedconfig["submit"].get("jarsdir") is not None) or (validatedconfig["submit"].get("jars") is not None):#Si introducen dependencias Jar, indicamos ruta donde se hace la copia
+    #    file.write("spark.driver.extraClassPath".ljust(67) + "/vagrant/jars\n")
+    #    file.write(f"spark.executor.extraClassPath".ljust(67) + "/vagrant/jars\n")
 
     if (validatedconfig["submit"].get("libsdir") is not None) or (validatedconfig["submit"].get("libs") is not None):#Si introducen dependencias como libs, indicamos ruta donde se hace la copia
         file.write("spark.driver.extraLibraryPath".ljust(67) + "/vagrant/libs\n")
@@ -307,7 +323,7 @@ def _local_standalone_submit(validatedconfig, file, temppath, cliargs):
         if key in ["app_jar","app_args","advanced","class",'driverlogs_file']:
             continue
         elif key in ["jarsdir","libsdir","libs","jars"]:
-            conf_switcher.get(key)(value)
+            conf_switcher.get(key)(value,file,"standalone")
         #Función habilitar logs necesita saber con que cluster estamos a traballar xa que cambian rutas internasd    
         elif key in ["historylogs_dir"]:
             conf_switcher.get(key)(file,'standalone')
@@ -315,6 +331,7 @@ def _local_standalone_submit(validatedconfig, file, temppath, cliargs):
             conf_switcher.get(key)(file, value)
     
     argsSubmit=_format_spark_submit_args(temppath,cliargs,validatedconfig["submit"], submitExecutablePath,'standalone')
+    print(argsSubmit)
     file.seek(0)
     print("\n*Executing apache spark batch job ...\n")
     try:
@@ -370,7 +387,12 @@ def cli(**kwargs):
                 _local_k8s_submit(validatedconfig,file, temppath, cliargs)
             elif cluster_type == 'standalone':
                 _local_standalone_submit(validatedconfig,file,temppath,cliargs)
-            print("* The submit operation has been successfully completed! You can check the results from the web interface or, depending on how the output was configured, through the CLI.\n")
+            print("\n* The submit operation has been completed! You can check the results from the web interface or, depending on how the output was configured, through the CLI.\n")
+    except KeyboardInterrupt:
+        logging.error("""
+WARNING: execution interrupted by the user!
+If the job has already been submitted to the cluster it will continue to run, please check it from the web interface and delete it there!
+""")
     finally:
         _delete_execution_files() #Limpamos ficheiros utilizados pola actual execución
         os.unlink(temppath)

@@ -74,21 +74,72 @@ def set_driver_memory(file,value):
 def set_driver_cores(file,value):
     file.write(f"spark.driver.cores".ljust(67) + f"{value}\n")
 
-def copy_dir_jars(value):
+def set_jars_classpath(file,clustertype,jars_names_list):
+    length=len(jars_names_list)
+    if length > 0:
+        i=0
+        added_jars=""
+        if clustertype == "standalone":
+            sharedpath= "/vagrant/jars/"
+        elif clustertype=="k8s":
+            sharedpath="/tmp/sharedpath/jars/"
+        while i<length:
+            if ( i == (length -1)):
+                added_jars+= sharedpath + jars_names_list[i]+ "\n"
+            else:
+                added_jars+= sharedpath + jars_names_list[i] + ":"
+            i +=1
+        file.write(f"spark.driver.extraClassPath".ljust(67) + added_jars)
+        file.write(f"spark.executor.extraClassPath".ljust(67) + added_jars)
+
+def copy_dir_jars(value,file,clustertype):
     dir = PurePath(value)
     if os.path.isdir(dir):
         defaultShared = expanduser("~") #Obtemos path directorio home donde creamos a carpeta a compartir
         defaultJarDir = PurePath(defaultShared) / ".easySparkTool/jars"
+        jars_names_list=[]
         with os.scandir(dir) as dirElements:
             for obj in dirElements:
                 filename,extension = os.path.splitext(obj)
                 if obj.is_file() and extension == ".jar":
+                    jars_names_list.append(obj.name)
                     destinationFile = defaultJarDir / obj.name
                     shutil.copy(obj,destinationFile)
                 else:
                     print(f"Ignoring object {obj.name} from the specified folder, only files with .jar extension will be used ...\n")
+        set_jars_classpath(file,clustertype,jars_names_list)
 
-
+def copy_specific_jars(value,file,clustertype):
+    filesList = value.split(',')
+    defaultShared = expanduser("~") #Obtemos path directorio home donde creamos a carpeta a compartir
+    defaultJarDir = PurePath(defaultShared) / ".easySparkTool/jars"
+    jars_names_list=[]
+    for stringjarfile in filesList:
+        jarfile = PurePath(stringjarfile)
+        if os.path.isfile(jarfile):
+            copiedJarPath = defaultJarDir / jarfile.name
+            shutil.copy(jarfile,copiedJarPath)
+            jars_names_list.append(jarfile.name)
+        else:
+            print(f"File {jarfile} specified at jars option is not a file, ignoring...")
+    set_jars_classpath(file,clustertype,jars_names_list)
+    #length=len(jars_names_list)
+    #if length > 0:
+    #    i=0
+    #    added_jars=""
+    #    if clustertype == "standalone":
+    #        sharedpath= "/vagrant/jars/"
+    #    elif clustertype=="k8s":
+    #        sharedpath="/tmp/sharedpath/jars/"
+    #    while i<length:
+    #        if ( i == (length -1)):
+    #            added_jars+= sharedpath + jars_names_list[i]+ "\n"
+    #        else:
+    #            added_jars+= sharedpath + jars_names_list[i] + ":"
+    #        i +=1
+    #    file.write(f"spark.driver.extraClassPath".ljust(67) + added_jars)
+    #    file.write(f"spark.executor.extraClassPath".ljust(67) + added_jars)
+    
 def copy_dir_libs(value):
     dir = PurePath(value)
     if os.path.isdir(dir):
@@ -102,18 +153,6 @@ def copy_dir_libs(value):
                     shutil.copy(obj,destinationFile)
                 else:
                     print(f"Ignoring object {obj.name} from the specified folder, only the files from the first level of the directory will be used ...\n")
-
-def copy_specific_jars(value):
-    filesList = value.split(',')
-    defaultShared = expanduser("~") #Obtemos path directorio home donde creamos a carpeta a compartir
-    defaultJarDir = PurePath(defaultShared) / ".easySparkTool/jars"
-    for stringjarfile in filesList:
-        jarfile = PurePath(stringjarfile)
-        if os.path.isfile(jarfile):
-            copiedJarPath = defaultJarDir / jarfile.name
-            shutil.copy(jarfile,copiedJarPath)
-        else:
-            print(f"File {jarfile} specified at jars option is not a file, ignoring...")
 
 def copy_specific_libs(value):
     filesList = value.split(',')

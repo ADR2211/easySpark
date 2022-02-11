@@ -224,6 +224,7 @@ def prepare_shared_folder(sharedpath,standalone):
     libspath = sharedpath / "libs"
     jarspath = sharedpath  / "jars"
     historypath = sharedpath / "historylogs"
+    argspath = sharedpath / "args"
     if not os.path.isdir(jarspath):
         os.mkdir(jarspath.as_posix())
     
@@ -232,8 +233,11 @@ def prepare_shared_folder(sharedpath,standalone):
     
     if not os.path.isdir(historypath):
         os.mkdir(historypath.as_posix())
-    
-    #Directorio que se utilizará para el espacio de memoria y los registros de salida de los trabajos
+
+    if not os.path.isdir(argspath):
+        os.mkdir(argspath.as_posix())
+
+    #Directorio que se utilizará para el espacio de memoria y los registros de salida del proceso driver en el caso de Standalone, en Kubernetes los recuperamos mediante API del propio cluster manager
     if standalone:
         workpath = sharedpath / "workDir"
         if not os.path.isdir(workpath):
@@ -253,7 +257,6 @@ def local_standalone_deploy(clustersection):
     configymlpath = sharedpath / "config.yml"
     #Create yaml file for variables used in vagrantfile
     with open(configymlpath,"w", encoding="utf-8") as yaml_file:
-        print(clustersection)
         dict = get_vagrantfile_variables(clustersection)
         yaml.dump(dict,yaml_file,default_flow_style=False)
     bashScriptDirPath = sharedpath / "setupConnectivity+Worker.sh"
@@ -276,27 +279,35 @@ def local_standalone_deploy(clustersection):
         print("\n* ERROR: Cluster could not be deployed successfully, please check previous logs to see the problems. Proceeding to remove the cluster dependencies to return to a consistent state ... ") 
         v.destroy()
         exit()
-    print(f"\n* Completed! Information summary to interact with the cluster:\n\n\t+ Spark Standalone Master waiting for submit jobs at \"spark://172.28.128.150:7077\"\n\n\t+ Spark Standalone Cluster WebUI availiable at \"http://172.28.128.150:8080\"")
+    print(f"\n* Completed! Information summary to interact with the cluster:\n\n\t+ Spark Standalone Master waiting for job submissions at \"spark://172.28.128.150:7077\"\n\n\t+ Spark Standalone Cluster WebUI availiable at \"http://172.28.128.150:8080\"")
 
 
 #Configuración cluster Kubernetes a levantar, especificando valores por defecto recomendados por Spark
 def addMinikubeArgs(clustersection):
 
-    cmd = ['minikube', 'start','-p','EasySpark'] #TODO: Testear despliegue con provider vbox e non docker
+    cmd = ['minikube', 'start']
     
+    #Agregamos múltiples nodos en caso de ser solicitados
+    nodes_num=clustersection.get('nodes')
+    if nodes_num is not None and nodes_num > 1:
+        cmd.extend(['--nodes',str(nodes_num)])
+
+    #Agregamos nombre de perfil Miniklube usado por nuestra herramienta
+    cmd.extend(['-p','easyspark'])
+
+    #Agregamos CPUs solicitadas por usuario o fijamos a 3, como recomiendan en la documentación de Spark
     if clustersection.get("node_cpus") is not None:
         cmd.extend(['--cpus',str(clustersection["node_cpus"])])
     else:
         cmd.extend(['--cpus',str(3)])
     
+    #Agregamos memoria por nodo solicitada por usuario o fijamos a 4096, como recomiendan en la documentación de Spark
     if clustersection.get("node_memory") is not None:
         cmd.extend(['--memory',str(clustersection["node_memory"])])
     else:
         cmd.extend(['--memory',str(4096)])
 
-    #if clustersection.get("provider") is not None:
-    #    cmd.extend(['--driver',str(clustersection["provider"]),'--no-vtx-check'])
-    #else:
+    #fijamos docker como único driver posible y perfil utilziado
     cmd.extend(['--driver','docker'])
 
     return cmd
@@ -306,12 +317,12 @@ def local_k8s_deploy(clustersection):
     if shutil.which("minikube") is None:
         raise MinikubeExecutableNotFoundError("Minikube is required and executable could not be found, please install the software or check environment variables.") 
     
-    minikubeStatusCmd = ['minikube','status', '-p', 'Easy']
+    minikubeStatusCmd = ['minikube','status', '-p', 'easyspark']
     pcsStatus = subprocess.run(minikubeStatusCmd,capture_output=True)
 
     #Devuelve 85 si encuentra perfil minikube (perfiles son usados para correr distintas instancias minikube)
     if pcsStatus.returncode == 85:           
-        print(f"* Checking for possible minikube profiles with name \"EasySpark\" ...\n")                
+        print(f"* Checking for possible minikube profiles with name \"easyspark\" ...\n")                
         #Comprobar estado actual del perfil  con el que se trabaja actualmente (actualProfile) para dar aviso en caso de Running
         pcsProfilesList = subprocess.run(['minikube', 'profile', 'list','-o','json'], capture_output=True)
         json_profiles_list=pcsProfilesList.stdout
@@ -320,10 +331,10 @@ def local_k8s_deploy(clustersection):
             if category == "valid":
                 for profile in list:
                     profileName=profile["Name"]
-                    if  profileName != "EasySpark":   
+                    if  profileName != "easyspark":   
                         continue               
                     else:
-                        update=input(f"\n* A local kubernetes cluster with the specified profile name \"EasySpark\" already exists (use \"minikube profile list\" for extended info).  Do you want to delete the current existing cluster and create a new one? (Y/n):    ")
+                        update=input(f"\n* A local kubernetes cluster with the specified profile name \"easyspark\" already exists (use \"minikube profile list\" for extended info).  Do you want to delete the current existing cluster and create a new one? (Y/n):    ")
                         while update.lower() not in ['','y','n']:
                             update = input("Please, insert y/n to response:    ")
                             break
@@ -338,10 +349,6 @@ def local_k8s_deploy(clustersection):
 
     print("* Deploying local k8s cluster ...")
     minikubeExec = addMinikubeArgs(clustersection)
-    #for option,value in clustersection.items():
-    #    if option != "deploy_type":
-    #        switcherOptions.get(option)(minikubeExec,value)
-            
     stringSharedFolder = expanduser("~") #Obtemos path directorio home donde creamos a carpeta a compartir
     sharedpath = PurePath(stringSharedFolder) / ".easySparkTool"
     prepare_shared_folder(sharedpath,False)
@@ -409,8 +416,6 @@ def cli(**kwargs):
                 local_k8s_deploy(validatedconfig["cluster"])
             elif validatedconfig["cluster"]["deploy_type"] == 'standalone':
                 local_standalone_deploy(validatedconfig["cluster"])
-            #TODO:else:
-                #cloud_deploy(validatedconfig["cluster"])
         else:           
             raise RequiredSectionError("   To execute the subcommand \"clusterinit\" it is necessary to specify a configuration file in which the \"cluster\" section exists with at least all its required fields.")    
     

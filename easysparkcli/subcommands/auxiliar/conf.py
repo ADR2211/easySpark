@@ -16,7 +16,8 @@ from easysparkcli.subcommands.auxiliar.validations import (
     master_url,
     check_advanced,
     app_jar,
-    booleanCheck
+    booleanCheck,
+    nodes_memory_units
 )
 
 #TODO: Meter comprobaciones bien en cada tipo: tipos,regex...
@@ -89,13 +90,13 @@ CLUSTER_TYPE_SCHEMAS = {
     'k8s': {
         "deploy_type": "k8s",
         Optional('node_cpus'): positive_int,
-        Optional('node_memory'): positive_int,
-        #Optional('provider'): Or('docker','virtualbox'), #'kvm2','vmware','parallels','hyperkit','none','hyperv','ssh'
+        Optional('node_memory'): nodes_memory_units,
+        Optional('nodes'): positive_int,
     },
     'standalone': {
         "deploy_type": "standalone",
         Optional('workers'): positive_int,
-        Optional('node_memory'): positive_int,
+        Optional('node_memory'): nodes_memory_units,
         Optional('node_cpus'): positive_int
     }
 }
