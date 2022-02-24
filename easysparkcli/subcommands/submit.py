@@ -37,7 +37,6 @@ from easysparkcli.subcommands.auxiliar.utils import (
     set_driver_cores,
     copy_dir_jars,
     copy_specific_jars,
-    copy_specific_libs,
     copy_dir_libs,
     set_executor_instances,
     deploy_mode,
@@ -59,7 +58,6 @@ conf_switcher= {
     'driver_memory' : partial(set_driver_memory),
     'driver_cores' : partial(set_driver_cores),
     'jarsdir' : partial(copy_dir_jars),
-    'libs' : partial(copy_specific_libs),
     'jars' : partial(copy_specific_jars),
     'libsdir' : partial(copy_dir_libs),
     'executor_instances' : partial(set_executor_instances),
@@ -75,7 +73,6 @@ def _get_spark_submit_executable():
     else:
         sparkhome=PurePath(os.environ["SPARK_HOME"]) #Evitar problemas con el diferente formato de path utilizado en Windows o
         sparkbin= sparkhome / "bin"
-        print(sparkbin)
         if os.path.isdir(sparkbin):
             system= platform.system()
             if system == "Windows":
@@ -100,7 +97,7 @@ def _delete_execution_files():
     sharedFolderPath = PurePath(stringSharedFolder) / ".easySparkTool"
 
     for filename in os.listdir(sharedFolderPath):
-        if filename in ['jars','libs','historylogs'] :
+        if filename in ['jars','libs','historylogs','args'] :
                 deleteContentFrom = sharedFolderPath / filename
                 if os.path.isdir(deleteContentFrom):
                     try:
@@ -168,7 +165,6 @@ def _format_spark_submit_args(tempfile, cliargs, submitsection,submitExecutableP
             else:
                 argsSubmit.append(arg)
     argsSubmit.insert(0,str(submitExecutablePath)) #Agregamos ejecutable en primera posición
-    print(argsSubmit)
     return argsSubmit
 
 def _check_dir_writable(dir):
@@ -199,7 +195,7 @@ def _retrieve_standalone_logs(drivername, submitconfig):
     stdout = currentExecutionLogDir / "stdout"
     stderr = currentExecutionLogDir / "stderr"
     if outputDestination is None:
-        print("*Retrieved logs from the current execution driver process:\n")
+        print("* Retrieved logs from the current execution driver process:\n")
         for file in [stderr,stdout]:
             with open(file,'r') as logContent:
                 print(logContent.read())
@@ -210,12 +206,12 @@ def _retrieve_standalone_logs(drivername, submitconfig):
                 for file in [stderr, stdout]:
                     with open(file,"r") as logContent:
                         shutil.copyfileobj(logContent, outputFile)
-            print(f"*Driver logs successfully saved to file {destinationFile}.\n")
+            print(f"* Driver logs successfully saved to file {destinationFile}.\n")
         else:
-            print(f"The driver logs could not be accessed, please check the results from the Spark cluster web interface available at \"https://172.28.128.150:8080\"")
+            print(f"* The driver logs could not be accessed, please check the results from the Spark cluster web interface available at \"https://172.28.128.150:8080\"")
     isHistoryFileRequested = submitconfig.get("historylogs_dir")
     if isHistoryFileRequested is not None:
-        print("*Saving history file at " + f"{isHistoryFileRequested} ...\n")
+        print("* Saving history file at " + f"{isHistoryFileRequested} ...\n")
         copy_historyfile(isHistoryFileRequested)
 
 def _retrieve_k8s_logs(validatedconfig, auxPodName, auxNamespace):
@@ -231,7 +227,7 @@ def _retrieve_k8s_logs(validatedconfig, auxPodName, auxNamespace):
                 getattr(configuration, str(option))["authorization"]=str(value)
                 continue
             setattr(configuration, str(option), str(value))
-    print("*Trying to connect with kubernetes API ...\n")
+    print("* Trying to connect with kubernetes API ...\n")
     with kubernetes.client.ApiClient(configuration) as api_client: #Auth utiliza por defecto key_file y cert_file, si los borramos y especificamos tokens cambia
         # Create an instance of the API class
         api_instance = kubernetes.client.CoreV1Api(api_client)
@@ -240,13 +236,13 @@ def _retrieve_k8s_logs(validatedconfig, auxPodName, auxNamespace):
             respLogs = api_instance.read_namespaced_pod_log(auxPodName, auxNamespace)
             stdoutFile = validatedconfig["submit"].get("driverlogs_file")
             if stdoutFile is None:            
-                print("Retrieved logs of the driver pod that executed the spark batch job:\n")
+                print("* Retrieved logs of the driver pod that executed the spark batch job:\n")
                 print(respLogs)
             else:
                 outputFile = open(stdoutFile,"w")
                 outputFile.write(respLogs)
                 outputFile.close()
-                print(f"Logs retrieved from K8S had been saved at {stdoutFile}")
+                print(f"* Logs retrieved from K8S had been saved at {stdoutFile}\n")
             #Comprobación de estado final del Pod para dar aviso en caso de error.
             api_response=api_instance.list_namespaced_pod(auxNamespace)
             for i in api_response.items:
@@ -261,7 +257,7 @@ def _retrieve_k8s_logs(validatedconfig, auxPodName, auxNamespace):
             print(e)
         isHistoryFileRequested = validatedconfig["submit"].get("historylogs_dir")
         if isHistoryFileRequested is not None:
-            print("*Saving history file at " + f"{isHistoryFileRequested} ...\n")
+            print("\n* Saving history file at " + f"{isHistoryFileRequested} ...")
             copy_historyfile(isHistoryFileRequested)
 
 def _local_k8s_submit(validatedconfig,file,temppath,cliargs):
@@ -272,31 +268,19 @@ def _local_k8s_submit(validatedconfig,file,temppath,cliargs):
 
     if (validatedconfig["submit"].get("container_image") is None): #Imaxe docker para os contedores por defecto en caso de que usuario non a especifique
         file.write("spark.kubernetes.container.image".ljust(67) + "adrianrc22/spark:latest\n")
-    
-    #if (validatedconfig["submit"].get("jarsdir") is not None) or (validatedconfig["submit"].get("jars") is not None):#Si introducen dependencias Jar, indicamos ruta donde se hace la copia
-    #    file.write("spark.driver.extraClassPath".ljust(67) + "/tmp/sharedpath/jars\n")
-    #    file.write(f"spark.executor.extraClassPath".ljust(67) + "/tmp/sharedpath/jars\n")
-
-    if (validatedconfig["submit"].get("libsdir") is not None) or (validatedconfig["submit"].get("libs") is not None):#Si introducen dependencias como libs, indicamos ruta donde se hace la copia
-        file.write("spark.driver.extraLibraryPath".ljust(67) + "/tmp/sharedpath/libs\n")
-        file.write(f"spark.executor.extraLibraryPath".ljust(67) + "/tmp/sharedpath/libs\n")
 
     for key,value in validatedconfig["submit"].items():
         if key in ["app_jar","app_args","advanced","class",'driverlogs_file']:
             continue
-        elif key in ["jarsdir","libsdir","libs","jars"]:
-            print("entro jars\n")
+        elif key in ["jarsdir","libsdir","jars"]:
             conf_switcher.get(key)(value, file,"k8s")
         elif key in ["historylogs_dir"]:
             conf_switcher.get(key)(file,'k8s')
         else:
             conf_switcher.get(key)(file, value)
     argsSubmit=_format_spark_submit_args(temppath,cliargs,validatedconfig["submit"],submitExecutablePath,'k8s')
-    print("\n" + str(argsSubmit) + "\n")
     file.seek(0)
-    print(file.read())
-    file.seek(0)
-    print("\n*Executing apache spark batch job ...\n")
+    print("\n* Executing apache spark batch job ...\n")
     try:
         pcs=subprocess.run(argsSubmit,text=True,capture_output=True)
         pcs.check_returncode()
@@ -311,18 +295,11 @@ def _local_k8s_submit(validatedconfig,file,temppath,cliargs):
 def _local_standalone_submit(validatedconfig, file, temppath, cliargs):
 
     submitExecutablePath = _get_spark_submit_executable()
-    #if (validatedconfig["submit"].get("jarsdir") is not None) or (validatedconfig["submit"].get("jars") is not None):#Si introducen dependencias Jar, indicamos ruta donde se hace la copia
-    #    file.write("spark.driver.extraClassPath".ljust(67) + "/vagrant/jars\n")
-    #    file.write(f"spark.executor.extraClassPath".ljust(67) + "/vagrant/jars\n")
-
-    if (validatedconfig["submit"].get("libsdir") is not None) or (validatedconfig["submit"].get("libs") is not None):#Si introducen dependencias como libs, indicamos ruta donde se hace la copia
-        file.write("spark.driver.extraLibraryPath".ljust(67) + "/vagrant/libs\n")
-        file.write(f"spark.executor.extraLibraryPath".ljust(67) + "/vagrant/libs\n")
 
     for key,value in validatedconfig["submit"].items():
         if key in ["app_jar","app_args","advanced","class",'driverlogs_file']:
             continue
-        elif key in ["jarsdir","libsdir","libs","jars"]:
+        elif key in ["jarsdir","libsdir","jars"]:
             conf_switcher.get(key)(value,file,"standalone")
         #Función habilitar logs necesita saber con que cluster estamos a traballar xa que cambian rutas internasd    
         elif key in ["historylogs_dir"]:
@@ -331,7 +308,6 @@ def _local_standalone_submit(validatedconfig, file, temppath, cliargs):
             conf_switcher.get(key)(file, value)
     
     argsSubmit=_format_spark_submit_args(temppath,cliargs,validatedconfig["submit"], submitExecutablePath,'standalone')
-    print(argsSubmit)
     file.seek(0)
     print("\n*Executing apache spark batch job ...\n")
     try:
@@ -341,8 +317,7 @@ def _local_standalone_submit(validatedconfig, file, temppath, cliargs):
         raise SparkJobError(
         "Error during the execution of the spark-submit command:\n {0}".format(pcs.stderr))
     driverName = pcs.stderr.partition("Driver successfully submitted as ")[2].split("\n")[0] #Recuperamos driver name
-    #print(driverName)
-    print("*Retrieving submit driver logs ...\n")
+    print("* Retrieving submit driver logs ...\n")
     _retrieve_standalone_logs(driverName, validatedconfig["submit"])
 
 @click.command()
@@ -353,10 +328,6 @@ def cli(**kwargs):
     '''
     rawconfig= read_config_file(abspath(kwargs['configfile'])) #Lectura del archivo de configuración
     validatedconfig = validate_raw_config(rawconfig) #Validacion de la configuracion usando el esquema
-
-    #Controlar que exista sección Submit
-    #if validatedconfig.get("submit") is None:
-    #    raise submitSectionMustExist("Submit section is required in the configuration file for the execution of this subcommand. Please rewrite the specified configuration file.")
     
     #Variable controlar si guardamos logs k8s en fichero salida o no
     cluster_type=validatedconfig["cluster"]["deploy_type"]
@@ -378,7 +349,6 @@ def cli(**kwargs):
             # os, ya que kwargs devuelve con _ y necesitamos -. deploy_mode -> deploy-mode       
             cliargs.update({arg:value}) #agrega campo nuevo con el par de valores
     
-    #TODO: Revisar Try-catch-finally
     try:
         fd, temppath = tempfile.mkstemp(suffix=".conf",text=True)
         with os.fdopen(fd, "r+") as file:
@@ -387,7 +357,7 @@ def cli(**kwargs):
                 _local_k8s_submit(validatedconfig,file, temppath, cliargs)
             elif cluster_type == 'standalone':
                 _local_standalone_submit(validatedconfig,file,temppath,cliargs)
-            print("\n* The submit operation has been completed! You can check the results from the web interface or, depending on how the output was configured, through the CLI.\n")
+            print("\n* The submit operation has been completed! You can check the results from the web interface and, depending on how the output was configured, through the CLI or at the specified output file.\n")
     except KeyboardInterrupt:
         logging.error("""
 WARNING: execution interrupted by the user!

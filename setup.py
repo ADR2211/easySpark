@@ -26,7 +26,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name = 'easysparkcli',
-    version = '0.0.4',
+    version = '1.0.0',
     author = 'Adrian Rodriguez Couto',
     author_email = 'adrian.rcouto@udc.es',
     description="Command Line Tool created with the purpose of ease the use of Apache Spark, allowing users to deploy/delete a Spark Cluster and submit batch jobs easily through different options.",

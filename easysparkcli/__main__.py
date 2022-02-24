@@ -12,7 +12,7 @@ class MyCLI(click.MultiCommand):
     def list_commands(self, ctx):
         rv = []
         for filename in os.listdir(plugin_folder):
-            if filename.endswith('.py') and filename != '__init__.py': #,'validations.py','exceptions.py','utils.py'
+            if filename.endswith('.py') and filename != '__init__.py':
                 rv.append(filename[:-3])
         rv.sort()
         return rv
@@ -33,21 +33,18 @@ def cli():
     '''Command-line tool for ease the execution of batch jobs with Spark.'''
     pass
 
-if __name__ == '__main__':
-    try:
-        cli()
-    except Exception as err:
-        logging.error(f"    {err}")
-
 def main(**kwargs):
     try:
+        sys.tracebacklimit = 0 #Evitamos xerar demasiado ruido na saída dos erros quitando o traceback
         cli(**kwargs)
     except KeyboardInterrupt:
-        sys.stderr.write("""
+        logging.error("""
 WARNING: execution interrupted by the user!
-Your clusters may be in inconsistent state!
 """)
-        return 1   
+    except Exception as err:
+        logging.error(f"{err}")
+        return 1
+
 
 if __name__ == "__main__":
     main()

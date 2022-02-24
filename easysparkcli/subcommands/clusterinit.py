@@ -17,8 +17,7 @@ from easysparkcli.subcommands.auxiliar.exceptions import (
     MinikubeExecutableNotFoundError,
     VagrantExecutableNotFoundError,
     ClusterSetupError,
-    RequiredSectionError,
-    sharedFolderPermissionsError
+    sharedFolderPermissionsError,
 )
 
 from easysparkcli.subcommands.auxiliar.utils import (
@@ -29,7 +28,8 @@ from easysparkcli.subcommands.auxiliar.utils import (
 
 from easysparkcli.subcommands.auxiliar.conf import (
     read_config_file,
-    validate_raw_config
+    validate_cluster_section,
+    #validate_raw_config
 )
 
 switcherOptions = {
@@ -319,9 +319,8 @@ def local_k8s_deploy(clustersection):
     
     minikubeStatusCmd = ['minikube','status', '-p', 'easyspark']
     pcsStatus = subprocess.run(minikubeStatusCmd,capture_output=True)
-
-    #Devuelve 85 si encuentra perfil minikube (perfiles son usados para correr distintas instancias minikube)
-    if pcsStatus.returncode == 85:           
+    #Devuelve 85 si no encuentra perfil minikube (perfiles son usados para correr distintas instancias minikube)
+    if pcsStatus.returncode != 85:           
         print(f"* Checking for possible minikube profiles with name \"easyspark\" ...\n")                
         #Comprobar estado actual del perfil  con el que se trabaja actualmente (actualProfile) para dar aviso en caso de Running
         pcsProfilesList = subprocess.run(['minikube', 'profile', 'list','-o','json'], capture_output=True)
@@ -409,15 +408,12 @@ def cli(**kwargs):
     try:
 
         rawconfig= read_config_file(abspath(kwargs['configfile'])) #Lectura del archivo de configuración
-        validatedconfig = validate_raw_config(rawconfig) #Validacion de la configuracion usando el esquema
-        
-        if "cluster" in validatedconfig.keys():
-            if validatedconfig["cluster"]["deploy_type"] == 'k8s':
-                local_k8s_deploy(validatedconfig["cluster"])
-            elif validatedconfig["cluster"]["deploy_type"] == 'standalone':
-                local_standalone_deploy(validatedconfig["cluster"])
-        else:           
-            raise RequiredSectionError("   To execute the subcommand \"clusterinit\" it is necessary to specify a configuration file in which the \"cluster\" section exists with at least all its required fields.")    
+        validatedconfig = validate_cluster_section(rawconfig) #Validacion de la sección cluster
+    
+        if validatedconfig["deploy_type"] == 'k8s':
+            local_k8s_deploy(validatedconfig)
+        elif validatedconfig["deploy_type"] == 'standalone':
+            local_standalone_deploy(validatedconfig)
     
     except KeyboardInterrupt:
         logging.error("""

@@ -36,12 +36,28 @@ def _file_name(v):
 
 @validator
 def existing_file(v):
-    print("K")
     f = _file_name(v)
     if os.access(f, os.F_OK):
         return f
     else:
         raise ValueError("file `{v}` could not be found".format(v=v))
+
+@validator
+def existing_files(files):
+    filesList = files.split(',')
+    for filestring in filesList:
+        filepath = PurePath(filestring)
+        if not os.path.isfile(filepath):
+            raise ValueError(f"{str(filepath)} is not a file or it does not exist.")
+    return files
+
+@validator
+def existing_dir(dir):
+    dir = PurePath(os.path.expanduser(dir))
+    if os.path.isdir(dir) and os.access(dir,os.R_OK):
+        return str(dir)
+    else:
+        raise ValueError(f"Directory {dir} is not valid. Please check that it is a directory, if it exists and if you have read permissions on it")
 
 @validator
 def nonempty_str(v):

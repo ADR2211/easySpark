@@ -14,7 +14,8 @@ from os.path import expanduser
 from easysparkcli.subcommands.auxiliar.exceptions import deleteClusterError
 from easysparkcli.subcommands.auxiliar.conf import (
     read_config_file,
-    validate_raw_config
+    validate_cluster_section
+    #validate_raw_config
 )
 
 
@@ -29,13 +30,13 @@ def cli(**kwargs):
         stringSharedFolder = expanduser("~")       
         sharedpath = PurePath(stringSharedFolder) / ".easySparkTool"
         raw_data=read_config_file(kwargs.get("configfile"))
-        validated_data=validate_raw_config(raw_data)
+        validated_data=validate_cluster_section(raw_data)
 
-        if validated_data["cluster"].get("deploy_type") == 'k8s':
+        if validated_data.get("deploy_type") == 'k8s':
             cmd=['minikube','delete','-p','easyspark']
             subprocess.run(cmd,stderr=sys.stderr,stdout=sys.stdout)
 
-        elif validated_data["cluster"].get("deploy_type") == 'standalone':
+        elif validated_data.get("deploy_type") == 'standalone':
             envvars = os.environ.copy()
             envvars["VAGRANT_CWD"] = str(sharedpath)
             v = vagrant.Vagrant(env=envvars,quiet_stdout=False,quiet_stderr=False)
@@ -44,7 +45,7 @@ def cli(**kwargs):
                 v.status()
             except:
                 print("\n")
-                raise deleteClusterError(f" Can't remove cluster, no Standalone deployment made with the EasySpark tool has been found.")
+                raise deleteClusterError(f"* Can't remove cluster, no Standalone deployment made with the EasySpark tool has been found.")
             v.destroy()  
             print("* Cluster Standalone successfully deleted!\n")
 

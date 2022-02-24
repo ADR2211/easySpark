@@ -32,7 +32,7 @@ Additionally, depending on the requested cluster manager for the Spark cluster, 
 Run the following to install:
 
 ```python
-pip install easySparkcli
+pip install easysparkcli
 ```
 
 ## Installation from source

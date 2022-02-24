@@ -49,14 +49,7 @@ def mount_sharedpaths_into_pods(file):
 
 def set_spark_logging(file,cluster_type):
     file.write("spark.eventLog.enabled".ljust(67) + "True\n")
-    #TODO: Copiamos a esta ruta e ao terminar execucion copiar arquivo á ruta especificada por usuario
-    #SCHEMA spark.kubernetes.driver.volumes.[VolumeType].[VolumeName].
-    #Montar ruta local en path /historylogs dentro do pod TODO:Comentar con Xoán Warning acerca dos volumeTypes hostPath
     if cluster_type == 'k8s':
-        #file.write("spark.kubernetes.driver.volumes.hostPath.localhost.mount.path".ljust(67) + "/tmp/historylogs\n")
-        #file.write("spark.kubernetes.driver.volumes.hostPath.localhost.readOnly".ljust(67) + "False\n")
-        #file.write("spark.kubernetes.driver.volumes.hostPath.localhost.options.path".ljust(67) + "/localsharedfolder/historylogs\n")
-        #file.write("spark.kubernetes.driver.volumes.hostPath.localhost.options.type".ljust(67) + "DirectoryOrCreate\n")
         file.write("spark.eventLog.dir".ljust(67) + "/tmp/sharedpath/historylogs\n")
     elif cluster_type == 'standalone':
         file.write("spark.eventLog.dir".ljust(67) + "/vagrant/historylogs\n")
@@ -116,55 +109,35 @@ def copy_specific_jars(value,file,clustertype):
     jars_names_list=[]
     for stringjarfile in filesList:
         jarfile = PurePath(stringjarfile)
-        if os.path.isfile(jarfile):
+        if os.path.isfile(jarfile) and jarfile.suffix == ".jar":
             copiedJarPath = defaultJarDir / jarfile.name
             shutil.copy(jarfile,copiedJarPath)
             jars_names_list.append(jarfile.name)
         else:
-            print(f"File {jarfile} specified at jars option is not a file, ignoring...")
+            print(f"File {jarfile} specified at jars option is not a jar file, ignoring...")
     set_jars_classpath(file,clustertype,jars_names_list)
-    #length=len(jars_names_list)
-    #if length > 0:
-    #    i=0
-    #    added_jars=""
-    #    if clustertype == "standalone":
-    #        sharedpath= "/vagrant/jars/"
-    #    elif clustertype=="k8s":
-    #        sharedpath="/tmp/sharedpath/jars/"
-    #    while i<length:
-    #        if ( i == (length -1)):
-    #            added_jars+= sharedpath + jars_names_list[i]+ "\n"
-    #        else:
-    #            added_jars+= sharedpath + jars_names_list[i] + ":"
-    #        i +=1
-    #    file.write(f"spark.driver.extraClassPath".ljust(67) + added_jars)
-    #    file.write(f"spark.executor.extraClassPath".ljust(67) + added_jars)
-    
-def copy_dir_libs(value):
+
+def copy_dir_libs(value, file,clustertype):
     dir = PurePath(value)
+    copiedFiles = 0
     if os.path.isdir(dir):
         defaultShared = expanduser("~") #Obtemos path directorio home donde creamos a carpeta a compartir
         defaultJarDir = PurePath(defaultShared) / ".easySparkTool/libs"
         with os.scandir(dir) as dirElements:
             for obj in dirElements:
-                filename,extension = os.path.splitext(obj)
-                if obj.is_file(): #TODO: Extensión específica das libs? .properties,.jar...?
+                if obj.is_file():
                     destinationFile = defaultJarDir / obj.name
                     shutil.copy(obj,destinationFile)
+                    copiedFiles+=1
                 else:
                     print(f"Ignoring object {obj.name} from the specified folder, only the files from the first level of the directory will be used ...\n")
-
-def copy_specific_libs(value):
-    filesList = value.split(',')
-    defaultShared = expanduser("~") #Obtemos path directorio home donde creamos a carpeta a compartir
-    defaultLibDir = PurePath(defaultShared) / ".easySparkTool/libs"
-    for stringlibfile in filesList:
-        libfile = PurePath(stringlibfile)
-        if os.path.isfile(libfile):
-            copiedJarPath = defaultLibDir / libfile.name
-            shutil.copy(libfile,copiedJarPath)
-        else:
-            print(f"File {libfile} specified at jars option is not a file, ignoring...")
+    if copiedFiles > 0:
+        if clustertype == "standalone":
+            file.write("spark.driver.extraLibraryPath".ljust(67) + "/vagrant/libs\n")
+            file.write(f"spark.executor.extraLibraryPath".ljust(67) + "/vagrant/libs\n")
+        elif clustertype == "k8s":
+            file.write("spark.driver.extraLibraryPath".ljust(67) + "/tmp/sharedpath/libs\n")
+            file.write(f"spark.executor.extraLibraryPath".ljust(67) + "/tmp/sharedpath/libs\n")
 
 def set_executor_instances(file,value):
     file.write(f"spark.executor.instances       {value}\n")
